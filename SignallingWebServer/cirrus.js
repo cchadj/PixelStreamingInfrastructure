@@ -275,10 +275,12 @@ if(config.EnableWebserver) {
 
 //Setup http and https servers
 http.listen(httpPort, function () {
+	httpPort = this.address().port
 	console.logColor(logging.Green, 'Http listening on *: ' + httpPort);
 });
 
 if (config.UseHTTPS) {
+	httpsPort = this.address().port
 	https.listen(httpsPort, function () {
 		console.logColor(logging.Green, 'Https listening on *: ' + httpsPort);
 	});
