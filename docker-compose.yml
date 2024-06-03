@@ -1,0 +1,14 @@
+﻿services:
+  signaling-web-server:
+    build:
+      context: .
+      dockerfile: SignallingWebServer/Dockerfile
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+      - "${STREAMER_TCP_PORT:-8888}:8888/tcp"
+      - "${STREAMER_UDP_PORT:-8888}:8888/udp"
+      - "${SFU_PORT:-8889}:8889"
+      - "${MATCHMAKER_PORT:-9999}:9999"
+    stdin_open: true
+    tty: true

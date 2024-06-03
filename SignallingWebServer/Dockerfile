@@ -1,30 +1,44 @@
 # Use the current Long Term Support (LTS) version of Node.js
 FROM node:lts
+
 # Copy the signalling server and frontend source code from the build context
-COPY /SignallingWebServer /SignallingWebServer
-COPY /Frontend /Frontend
-# Install the dependencies for the signalling server and build the frontend
-RUN SignallingWebServer/platform_scripts/bash/setup.sh --build
-# Expose TCP ports 80 and 443 for player WebSocket connections and web server HTTP(S) access
+WORKDIR /App
+
+COPY SignallingWebServer SignallingWebServer
+COPY Frontend Frontend
+
+WORKDIR /App/Frontend/library
+RUN npm install && npm run build-dev
+
+WORKDIR /App/Frontend/ui-library
+RUN npm install && npm link ../library && npm run build-dev
+
+WORKDIR /App/Frontend/implementations/typescript
+RUN npm install && npm link ../../library ../../ui-library && npm run build-dev
+
+## Install the dependencies for the signalling server and build the frontend
+#RUN /SignallingWebServer/platform_scripts/bash/setup.sh --build
+## Expose TCP ports 80 and 443 for player WebSocket connections and web server HTTP(S) access
 EXPOSE 80
 EXPOSE 443
 
-# Expose TCP port 8888 for streamer WebSocket connections
+## Expose TCP port 8888 for streamer WebSocket connections
 EXPOSE 8888
 EXPOSE 8888/udp
 
-# Expose TCP port 8889 for connections from the SFU
+## Expose TCP port 8889 for connections from the SFU
 EXPOSE 8889
 
-# Expose TCP port 19302 for connections to Google's stun server
+## Expose TCP port 19302 for connections to Google's stun server
 EXPOSE 19302
 
-# Expose TCP port 9999 for connections from the Matchmaker
+## Expose TCP port 9999 for connections from the Matchmaker
 EXPOSE 9999
 
-# Expose TCP port 19302 for connections from coturn
+## Expose TCP port 19302 for connections from coturn
 EXPOSE 3478
 EXPOSE 3479
 
-# Set the signalling server as the container's entrypoint
-ENTRYPOINT ["/usr/local/bin/node", "/SignallingWebServer/cirrus.js"]
+## Set the signalling server as the container's entrypoint
+WORKDIR /App
+ENTRYPOINT ["node", "SignallingWebServer/cirrus.js"]
