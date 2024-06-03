@@ -41,4 +41,4 @@ EXPOSE 3479
 
 ## Set the signalling server as the container's entrypoint
 WORKDIR /App
-ENTRYPOINT ["node", "SignallingWebServer/cirrus.js"]
+ENTRYPOINT ["node", "SignallingWebServer/cirrus.js", "--UseAuthentication", "--UseHTTPS"]
