@@ -8,6 +8,9 @@ var app = express();
 const fs = require('fs');
 const path = require('path');
 const querystring = require('querystring');
+const jwt = require("jsonwebtoken")
+const jwkToPem = require("pem-jwk").jwk2pem;
+require("dotenv").config()
 const bodyParser = require('body-parser');
 const logging = require('./modules/logging.js');
 logging.RegisterConsoleLogger();
@@ -205,9 +208,9 @@ var limiter = RateLimit({
 // apply rate limiter to all requests
 app.use(limiter);
 
-const clinetId = "xyza7891DBPp9ZW12ngXVhO9LPzduKmg";
-const clientSecret = "YOUR_CLIENT_SECRET";
-const redirectUri = "https://localhost:3000/auth/callback";
+const clientId = process.env.CLIENT_ID;
+const clientSecret = process.env.CLIENT_SECRET;
+const redirectUri = "https://localhost/auth/callback";
 
 //Setup the login page if we are using authentication
 if(config.UseAuthentication){
@@ -247,20 +250,42 @@ if(config.UseAuthentication){
 					// Verify the access token
 					const isValid = await verifyTokenOffline(tokenData.access_token);
 					if (isValid) {
+						console.log(tokenData)
+						const stringifiedTokenData = JSON.stringify(tokenData, null, " ")
 						// Pass the token to the success page
 						res.send(`
                                 <html>
                                 <body>
-                                    <script>
-                                        const token = "${tokenData.access_token}";
-                                        const socket = new WebSocket('ws://localhost:8888');
-                                        socket.onopen = () => {
-                                            socket.send(JSON.stringify({ type: 'authenticate', token: token }));
-                                        };
-                                        socket.onmessage = (message) => {
-                                            console.log('Received:', message.data);
-                                        };
-                                    </script>
+                                    // <script>
+                                    //     const token = "${tokenData.access_token}";
+                                    //     const socket = new WebSocket('ws://localhost:8888');
+                                    //     socket.onopen = () => {
+                                    //         socket.send(JSON.stringify({ type: 'authenticate', token: token }));
+                                    //     };
+                                    //     socket.onmessage = (message) => {
+                                    //         console.log('Received:', message.data);
+                                    //     };
+                                    	function myFunction() {
+										  // Get the text field
+										  const copyText = document.getElementById("myInput");
+
+										  // Select the text field
+										  copyText.select();
+										  copyText.setSelectionRange(0, 99999); // For mobile devices
+
+										   // Copy the text inside the text field
+										  navigator.clipboard.writeText(copyText.value);
+
+										  // Alert the copied text
+										  alert("Copied the text: " + copyText.value);
+										}
+                                    // </script>
+                                    <!-- The text field -->
+									<input type="text" value="${tokenData.access_token}" id="myInput">
+
+									<!-- The button used to copy the text -->
+									<button onclick="myFunction()">Copy Access Token</button>
+                                    <pre> ${stringifiedTokenData.toString()} </pre>
                                     <h1>Authentication Successful</h1>
                                 </body>
                                 </html>
