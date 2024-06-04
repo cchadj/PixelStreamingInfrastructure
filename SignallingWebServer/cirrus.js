@@ -64,10 +64,10 @@ if (config.UseHTTPS) {
 var isAuthenticated = redirectUrl => function (req, res, next) { return next(); }
 
 if (config.UseAuthentication && config.UseHTTPS) {
-	var passport = require('passport');
-	require('./modules/authentication').init(app);
-	// Replace the isAuthenticated with the one setup on passport module
-	isAuthenticated = passport.authenticationMiddleware ? passport.authenticationMiddleware : isAuthenticated
+	// var passport = require('passport');
+	// require('./modules/authentication').init(app);
+	// // Replace the isAuthenticated with the one setup on passport module
+	// isAuthenticated = passport.authenticationMiddleware ? passport.authenticationMiddleware : isAuthenticated
 } else if (config.UseAuthentication && !config.UseHTTPS) {
 	console.error('Trying to use authentication without using HTTPS, this is not allowed and so authentication will NOT be turned on, please turn on HTTPS to turn on authentication');
 }
@@ -205,29 +205,102 @@ var limiter = RateLimit({
 // apply rate limiter to all requests
 app.use(limiter);
 
+const clinetId = "xyza7891DBPp9ZW12ngXVhO9LPzduKmg";
+const clientSecret = "YOUR_CLIENT_SECRET";
+const redirectUri = "https://localhost:3000/auth/callback";
+
 //Setup the login page if we are using authentication
 if(config.UseAuthentication){
-	if(config.EnableWebserver) {
-		app.get('/login', function(req, res){
-			res.sendFile(path.join(__dirname, '/Public', '/login.html'));
-		});
-	}
+// Redirect user to EOS login
+	app.get('/login', function(req, res) {
+		// const loginUrl = `https://api.epicgames.dev/auth/v1/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=basic_profile`;
+		const loginUrl = `https://www.epicgames.com/id/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=basic_profile`
+		res.redirect(loginUrl);
+	});
 
-	// create application/x-www-form-urlencoded parser
-	var urlencodedParser = bodyParser.urlencoded({ extended: false })
+	// Handle the OAuth callback
+	app.get('/auth/callback', async function(req, res) {
+		const authCode = req.query.code;
 
-	//login page form data is posted here
-	app.post('/login', 
-		urlencodedParser, 
-		passport.authenticate('local', { failureRedirect: '/login' }), 
-		function(req, res){
-			//On success try to redirect to the page that they originally tired to get to, default to '/' if no redirect was found
-			var redirectTo = req.session.redirectTo ? req.session.redirectTo : '/';
-			delete req.session.redirectTo;
-			console.log(`Redirecting to: '${redirectTo}'`);
-			res.redirect(redirectTo);
+		if (authCode) {
+			try {
+				// Exchange authorization code for access token
+				const tokenUrl = 'https://api.epicgames.dev/epic/oauth/v2/token';
+				const params = new URLSearchParams();
+				params.append('grant_type', 'authorization_code');
+				params.append('code', authCode);
+				params.append('client_id', clientId);
+				params.append('client_secret', clientSecret);
+				params.append('redirect_uri', redirectUri);
+
+				const tokenResponse = await fetch(tokenUrl, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+						'Authorization': 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64')
+					},
+					body: params,
+				});
+
+				const tokenData = await tokenResponse.json();
+				if (tokenData.access_token) {
+					// Verify the access token
+					const isValid = await verifyTokenOffline(tokenData.access_token);
+					if (isValid) {
+						// Pass the token to the success page
+						res.send(`
+                                <html>
+                                <body>
+                                    <script>
+                                        const token = "${tokenData.access_token}";
+                                        const socket = new WebSocket('ws://localhost:8888');
+                                        socket.onopen = () => {
+                                            socket.send(JSON.stringify({ type: 'authenticate', token: token }));
+                                        };
+                                        socket.onmessage = (message) => {
+                                            console.log('Received:', message.data);
+                                        };
+                                    </script>
+                                    <h1>Authentication Successful</h1>
+                                </body>
+                                </html>
+                            `);
+					} else {
+						res.status(401).send('Token is invalid or expired.');
+					}
+				} else {
+					res.status(400).send('Failed to retrieve access token.');
+				}
+			} catch (error) {
+				console.error('Error during token exchange:', error);
+				res.status(500).send('Internal Server Error');
+			}
+		} else {
+			res.status(400).send('Authorization code not found.');
 		}
-	);
+	});	
+	
+	// if(config.EnableWebserver) {
+	// 	app.get('/login', function(req, res){
+	// 		res.sendFile(path.join(__dirname, '/Public', '/login.html'));
+	// 	});
+	// }
+	//
+	// // create application/x-www-form-urlencoded parser
+	// var urlencodedParser = bodyParser.urlencoded({ extended: false })
+	//
+	// //login page form data is posted here
+	// app.post('/login', 
+	// 	urlencodedParser, 
+	// 	passport.authenticate('local', { failureRedirect: '/login' }), 
+	// 	function(req, res){
+	// 		//On success try to redirect to the page that they originally tired to get to, default to '/' if no redirect was found
+	// 		var redirectTo = req.session.redirectTo ? req.session.redirectTo : '/';
+	// 		delete req.session.redirectTo;
+	// 		console.log(`Redirecting to: '${redirectTo}'`);
+	// 		res.redirect(redirectTo);
+	// 	}
+	// );
 }
 
 if(config.EnableWebserver) {
@@ -280,8 +353,8 @@ http.listen(httpPort, function () {
 });
 
 if (config.UseHTTPS) {
-	httpsPort = this.address().port
 	https.listen(httpsPort, function () {
+		httpsPort = this.address().port
 		console.logColor(logging.Green, 'Https listening on *: ' + httpsPort);
 	});
 }
@@ -1283,5 +1356,23 @@ function sendPlayerDisconnectedToMatchmaker() {
 		matchmaker.write(JSON.stringify(message));
 	} catch (err) {
 		console.logColor(logging.Red, `ERROR sending clientDisconnected: ${err.message}`);
+	}
+}
+
+// Function to verify the access token offline using JWT and JWK
+async function verifyTokenOffline(token) {
+	try {
+		const jwksResponse = await fetch('https://api.epicgames.dev/epic/oauth/v2/.well-known/jwks.json');
+		const jwks = await jwksResponse.json();
+		const publicKey = jwks.keys[0]; // Fetch the first key, or find the correct one based on `kid`
+
+		const pem = jwkToPem(publicKey); // Convert JWK to PEM
+		const decoded = jwt.verify(token, pem, { algorithms: ['RS256'] });
+
+		console.log('Token is valid:', decoded);
+		return true;
+	} catch (error) {
+		console.error('Error verifying token:', error);
+		return false;
 	}
 }

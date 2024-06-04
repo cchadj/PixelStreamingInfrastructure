@@ -1,8 +1,8 @@
 {
 	"UseFrontend": false,
 	"UseMatchmaker": false,
-	"UseHTTPS": false,
-	"UseAuthentication": false,
+	"UseHTTPS": true,
+	"UseAuthentication": true,
 	"LogToFile": true,
 	"LogVerbose": true,
 	"HomepageFile": "player.html",
